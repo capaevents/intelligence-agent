@@ -16,7 +16,8 @@ UA = "capa-intelligence-agent/1.0 (+public pages only)"
 TOOL_HELP = """Tools (call ONE per turn):
 - read_tracker  {"days": 7, "query": ""}  : items CAPA's tracker already collected (title, url, pao, relevance). Read-only.
 - search_news   {"query": "..."}          : Google News search, last 30 days. Read-only.
-- fetch_page    {"url": "https://..."}    : text and links of one public page. Only allowlisted sites work. Read-only.
+- fetch_page    {"url": "https://..."}    : text and links of one public page. Only the standards-body sites (iaasb.org,
+  ethicsboard.org, ifac.org, ifrs.org) work; the limit applies to fetching only. Read-only.
 - save_finding  {"ref": "r3", "summary": "...", "reason": "...", "theme": "..."} : save one suggested finding for
   staff to review. ref is the id of a search result (r1, r2...). For a page or tracker item use "url" (and "title")
   instead of ref. Only sources you have seen can be saved. theme is one of: %s.

@@ -219,3 +219,18 @@ def test_agent_cannot_finish_before_minimum_searches():
     r = run(FakeLLM([{"done": True, "summary": "nothing"}, act("search_news", query="a"), act("search_news", query="b"),
                      {"done": True, "summary": "ok"}]), t, "g", dict(LIMITS, min_searches=2))
     assert r["stopped"] == "done" and r["searches"] == 2 and r["steps"][0]["ok"] is False
+
+
+def test_empty_handed_finish_gets_one_second_look():
+    t = tools()
+    llm = FakeLLM([act("search_news", query="a"), {"done": True, "summary": "nothing"},
+                   act("save_finding", ref="r1", summary="s", reason="r"), {"done": True, "summary": "one"}])
+    r = run(llm, t, "g", dict(LIMITS, min_searches=1))
+    assert r["stopped"] == "done" and len(r["findings"]) == 1
+
+
+def test_empty_handed_finish_is_accepted_the_second_time():
+    t = tools()
+    llm = FakeLLM([act("search_news", query="a"), {"done": True, "summary": "n"}, {"done": True, "summary": "still n"}])
+    r = run(llm, t, "g", dict(LIMITS, min_searches=1))
+    assert r["stopped"] == "done" and r["findings"] == [] and r["summary"] == "still n"

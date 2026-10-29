@@ -34,7 +34,7 @@ Cloudflare Workers AI (Llama 3.3 70B) > OpenRouter free (NVIDIA Nemotron). Overr
 pip install -r requirements.txt
 export GROQ_API_KEY=...            # any one provider key is enough
 python -m agent --dry-run          # no database; result written to out/run-*.json
-python -m pytest                   # 19 tests, no keys or network needed
+python -m pytest                   # 21 tests, no keys or network needed
 ```
 
 ## Saving to Supabase

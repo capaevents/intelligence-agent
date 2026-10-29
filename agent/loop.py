@@ -3,6 +3,7 @@ back. The code, not the model, enforces every limit, so a confused model cannot 
 import json
 import re
 import time
+from datetime import datetime, timezone
 
 from .llm import LLMUnavailable
 from .tools import TOOL_HELP, clip
@@ -39,10 +40,10 @@ def parse_action(text):
 def run(llm, tools, goal, limits, clock=time.monotonic):
     start = clock()
     messages = [{"role": "system", "content": SYSTEM},
-                {"role": "user", "content": f"GOAL:\n{goal}\n\n{TOOL_HELP}\n\nLimits: {limits['max_steps']} steps, "
+                {"role": "user", "content": f"Today's date: {datetime.now(timezone.utc).date().isoformat()}.\n\nGOAL:\n{goal}\n\n{TOOL_HELP}\n\nLimits: {limits['max_steps']} steps, "
                                             f"{limits['max_searches']} searches, {limits['max_fetches']} page fetches."}]
     steps, summary, stopped, bad = [], "", "max_steps", 0
-    failed, too_early = set(), 0
+    failed, too_early, nudged_empty = set(), 0, False
     for n in range(1, limits["max_steps"] + 1):
         if clock() - start > limits["max_seconds"]:
             stopped = "time_limit"
@@ -71,6 +72,15 @@ def run(llm, tools, goal, limits, clock=time.monotonic):
             messages += [{"role": "assistant", "content": json.dumps(action)},
                          {"role": "user", "content": f"Not yet: you have run {tools.count['search_news']} searches and must run at "
                                                      f"least {limits['min_searches']} before finishing. Use search_news now."}]
+            continue
+        if action.get("done") and not tools.findings and not nudged_empty and n < limits["max_steps"] - 1:
+            nudged_empty = True     # one push: finishing empty-handed is allowed, but only after a second look
+            steps.append({"step": n, "tool": "done", "ok": False, "error": "finished with nothing saved; asked to look again"})
+            messages += [{"role": "assistant", "content": json.dumps(action)},
+                         {"role": "user", "content": "You have saved nothing. Look again at the search results: any relevant news "
+                                                     "result can be saved by its id with save_finding (the site allowlist only "
+                                                     "limits fetch_page, not saving). Save the genuinely relevant ones, or call "
+                                                     "done again if truly nothing is relevant."}]
             continue
         if action.get("done"):
             summary = str(action.get("summary", ""))[:800]
