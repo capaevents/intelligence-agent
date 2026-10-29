@@ -247,3 +247,10 @@ def test_arguments_written_beside_the_tool_name_are_accepted():
 def test_bad_arguments_error_shows_the_exact_shape():
     out = tools().call("search_news", {})
     assert "error" in out and '"args"' in out["error"]
+
+
+def test_a_home_page_is_not_accepted_as_a_source():
+    t = tools()
+    t.seen.add("https://www.iaasb.org")
+    out = t.call("save_finding", {"title": "t", "url": "https://www.iaasb.org/", "summary": "s", "reason": "r"})
+    assert "error" in out and "home page" in out["error"] and not t.findings

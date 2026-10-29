@@ -122,14 +122,15 @@ class Tools:
         for a in soup.find_all("a", href=True):
             href = requests.compat.urljoin(r.url, a["href"])
             label = " ".join(a.get_text(" ").split())
-            if label and href.startswith("http"):
-                links.append({"text": label[:100], "url": href})
+            if len(label) >= 20 and href.startswith("http") and not any(l["url"] == href for l in links):  # headlines, not menu items
+                links.append({"text": label[:90], "url": href})
                 self.seen.add(norm(href))
-            if len(links) >= 15:
+            if len(links) >= 10:
                 break
         self.seen.add(norm(url))
         self.seen.add(norm(r.url))
-        return {"url": r.url, "text": text[:2000], "links": links}
+        # links first: the size cap in clip() trims the end, and the links are what the agent needs to cite an article
+        return {"url": r.url, "links": links, "text": text[:600]}
 
     def save_finding(self, summary, reason, title="", url="", ref="", theme="other"):
         if self.count["save_finding"] >= self.limits["max_findings"]:
@@ -139,6 +140,9 @@ class Tools:
             if not hit:
                 return {"error": f"unknown ref {ref!r}; use an id from a search result, or give a url"}
             url, title = hit["url"], title or hit["title"]
+        if ref == "" and urlsplit(url or "").path.strip("/") == "":
+            return {"error": "that is a site's home page, not a source. Save the specific article: use its own url from "
+                             "the page's links list, or the id of a search result."}
         if norm(url) not in self.seen:
             return {"error": "url not seen in any tool result this run; only save sources you actually found"}
         if any(norm(f["url"]) == norm(url) for f in self.findings):
