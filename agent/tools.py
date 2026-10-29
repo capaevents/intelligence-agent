@@ -45,6 +45,7 @@ class Tools:
         self.http = http or requests.Session()
         self.http.headers.update({"User-Agent": UA})
         self.seen = set()
+        self.tracker_available = None   # how many tracker items the store held on the last read_tracker call
         self.refs = {}      # "r1" -> a search result, so the model never has to copy a long Google News link
         self.findings = []
         self.count = {"search_news": 0, "fetch_page": 0, "save_finding": 0}
@@ -73,6 +74,7 @@ class Tools:
     def read_tracker(self, days=7, query=""):
         days = max(1, min(int(days), 30))
         rows = self.store.recent_items(days)
+        self.tracker_available = len(rows)
         q = (query or "").lower().strip()
         out = []
         for r in rows:

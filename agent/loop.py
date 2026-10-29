@@ -116,4 +116,4 @@ def run(llm, tools, goal, limits, clock=time.monotonic):
                      {"role": "user", "content": f"RESULT of {name}: " + clip(result, limits["max_tool_chars"]) + hint}]
     return {"findings": tools.findings, "steps": steps, "summary": summary, "stopped": stopped,
             "model": (llm.used[-1] if llm.used else None), "seconds": round(clock() - start, 1), "ai_log": llm.log,
-            "searches": tools.count["search_news"], "fetches": tools.count["fetch_page"]}
+            "tracker_items": tools.tracker_available, "searches": tools.count["search_news"], "fetches": tools.count["fetch_page"]}

@@ -263,3 +263,9 @@ def test_link_put_in_the_ref_field_is_treated_as_the_url():
     assert out["saved"] and t.findings[0]["url"] == "https://www.iaasb.org/news/a-story"
     out = t.call("save_finding", {"ref": "url", "url": "https://www.iaasb.org/news/b", "title": "T", "summary": "s", "reason": "r"})
     assert "error" in out and "not seen" in out["error"]        # junk ref ignored; the url is still checked
+
+
+def test_run_reports_how_many_tracker_items_were_available():
+    t = tools(items=[{"title": "PAO news", "url": "https://pao.example.org/a", "pao_id": "x"}])
+    r = run(FakeLLM([act("read_tracker"), {"done": True, "summary": "x"}]), t, "g", dict(LIMITS, min_searches=0))
+    assert r["tracker_items"] == 1
