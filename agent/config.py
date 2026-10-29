@@ -12,8 +12,8 @@ LIMITS = {
     "max_searches": 3,      # search_news calls
     "max_fetches": 4,       # fetch_page calls
     "max_findings": 10,     # save_finding calls
-    "max_seconds": 240,     # wall-clock time
-    "max_tool_chars": 3000, # size of any tool result shown to the model
+    "max_seconds": 480,     # wall-clock time
+    "max_tool_chars": 2500, # size of any tool result shown to the model
 }
 
 GOAL = """Find developments from the last 30 days that CAPA (the Confederation of Asian and Pacific \

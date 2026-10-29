@@ -3,7 +3,7 @@ import json
 
 from agent.config import LIMITS
 from agent.llm import LLM, LLMUnavailable
-from agent.loop import run
+from agent.loop import parse_action, run
 from agent.store import DryRunStore
 from agent.tools import Tools
 
@@ -123,7 +123,7 @@ def test_llm_falls_through_to_the_next_model():
 
     llm = LLM(env={"GROQ_API_KEY": "k", "GEMINI_API_KEY": "k"}, http=H(), sleep=lambda s: None)
     text, spec = llm.chat([{"role": "user", "content": "x"}])
-    assert text == "hi" and spec.startswith("groq:") and llm.log        # rate limit was waited out, then answered
+    assert text == "hi" and spec.startswith("gemini:") and llm.log      # rate limit was waited out, then answered
 
 
 def test_llm_with_no_keys_raises():
@@ -162,11 +162,11 @@ def test_a_hard_failure_moves_to_the_next_model():
 
         def post(self, url, **kw):
             self.n += 1
-            return Resp(b"{}", 401) if "groq" in url else Resp(json.dumps({"choices": [{"message": {"content": "hi"}}]}).encode())
+            return Resp(b"{}", 401) if "generativelanguage" in url else Resp(json.dumps({"choices": [{"message": {"content": "hi"}}]}).encode())
 
     llm = LLM(env={"GROQ_API_KEY": "k", "GEMINI_API_KEY": "k"}, http=H(), sleep=lambda s: None)
     text, spec = llm.chat([{"role": "user", "content": "x"}])
-    assert spec.startswith("gemini:") and any("HTTP 401" in l for l in llm.log)
+    assert spec.startswith("groq:") and any("HTTP 401" in l for l in llm.log)
 
 
 def test_empty_stop_goes_to_next_model_without_killing_the_first():
@@ -188,3 +188,27 @@ def test_a_failed_call_is_not_repeated_and_the_error_is_recorded():
     r = run(FakeLLM([call, call, {"done": True, "summary": "x"}]), t, "g", dict(LIMITS))
     assert len(http.calls) == 1                                           # second identical call never hit the site
     assert r["steps"][0]["ok"] is False and "404" in r["steps"][0]["error"] and r["steps"][1]["ok"] is False
+
+
+def test_answer_written_into_the_reasoning_field_is_recovered():
+    class H:
+        def post(self, url, **kw):
+            msg = {"content": "", "reasoning": 'We need to read first.{"tool":"read_tracker","args":{"days":7}}'}
+            return Resp(json.dumps({"choices": [{"finish_reason": "stop", "message": msg}]}).encode())
+
+    text, spec = LLM(env={"GROQ_API_KEY": "k"}, http=H(), sleep=lambda s: None).chat([{"role": "user", "content": "x"}])
+    assert parse_action(text) == {"tool": "read_tracker", "args": {"days": 7}}
+
+
+def test_parse_action_tolerates_think_blocks_and_chatter():
+    assert parse_action('<think>maybe {"a": 1}</think>Sure! ```json\n{"tool": "search_news", "args": {"query": "x"}}\n```')["tool"] == "search_news"
+    assert parse_action("no json here") is None
+
+
+def test_save_finding_by_search_result_id():
+    t = tools()
+    res = t.call("search_news", {"query": "a"})
+    assert "url" not in res["results"][0] and res["results"][0]["id"] == "r1"     # no long links in the model's context
+    out = t.call("save_finding", {"ref": "r1", "summary": "s", "reason": "r", "theme": "ethics_standards"})
+    assert out == {"saved": True, "total": 1} and t.findings[0]["url"]
+    assert "error" in t.call("save_finding", {"ref": "r99", "summary": "s", "reason": "r"})

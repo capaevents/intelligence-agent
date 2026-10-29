@@ -17,8 +17,9 @@ TOOL_HELP = """Tools (call ONE per turn):
 - read_tracker  {"days": 7, "query": ""}  : items CAPA's tracker already collected (title, url, pao, relevance). Read-only.
 - search_news   {"query": "..."}          : Google News search, last 30 days. Read-only.
 - fetch_page    {"url": "https://..."}    : text and links of one public page. Only allowlisted sites work. Read-only.
-- save_finding  {"title": "...", "url": "...", "summary": "...", "reason": "...", "theme": "..."} : save one suggested
-  finding for staff to review. url must be one you have already seen in a tool result. theme is one of: %s.
+- save_finding  {"ref": "r3", "summary": "...", "reason": "...", "theme": "..."} : save one suggested finding for
+  staff to review. ref is the id of a search result (r1, r2...). For a page or tracker item use "url" (and "title")
+  instead of ref. Only sources you have seen can be saved. theme is one of: %s.
 Finish with {"done": true, "summary": "<2-3 sentences on what you found and what you could not check>"}.""" % ", ".join(THEMES)
 
 
@@ -35,6 +36,7 @@ class Tools:
         self.http = http or requests.Session()
         self.http.headers.update({"User-Agent": UA})
         self.seen = set()
+        self.refs = {}      # "r1" -> a search result, so the model never has to copy a long Google News link
         self.findings = []
         self.count = {"search_news": 0, "fetch_page": 0, "save_finding": 0}
 
@@ -88,8 +90,10 @@ class Tools:
         out = []
         for e in feed.entries[:8]:
             link = e.get("link", "")
-            out.append({"title": e.get("title", ""), "url": link,
-                        "source": (e.get("source") or {}).get("title", ""), "date": e.get("published", "")})
+            rid = f"r{len(self.refs) + 1}"
+            title, source = e.get("title", ""), (e.get("source") or {}).get("title", "")
+            self.refs[rid] = {"url": link, "title": title}
+            out.append({"id": rid, "title": title[:140], "source": source, "date": e.get("published", "")[:16]})
             self.seen.add(norm(link))
         return {"count": len(out), "results": out}
 
@@ -118,9 +122,14 @@ class Tools:
         self.seen.add(norm(r.url))
         return {"url": r.url, "text": text[:2000], "links": links}
 
-    def save_finding(self, title, url, summary, reason, theme="other"):
+    def save_finding(self, summary, reason, title="", url="", ref="", theme="other"):
         if self.count["save_finding"] >= self.limits["max_findings"]:
             return {"error": "finding limit reached"}
+        if ref:
+            hit = self.refs.get(str(ref))
+            if not hit:
+                return {"error": f"unknown ref {ref!r}; use an id from a search result, or give a url"}
+            url, title = hit["url"], title or hit["title"]
         if norm(url) not in self.seen:
             return {"error": "url not seen in any tool result this run; only save sources you actually found"}
         if any(norm(f["url"]) == norm(url) for f in self.findings):

@@ -7,9 +7,9 @@ import time
 import requests
 
 CHAIN = [
-    ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]),
     ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "GEMINI_API_KEY",
      ["gemini-3.8-flash", "gemini-flash-latest"]),
+    ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]),
     ("cloudflare", "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions", "CF_AI_TOKEN",
      ["@cf/meta/llama-3.3-70b-instruct-fp8-fast"]),
     ("openrouter", "https://openrouter.ai/api/v1/chat/completions", "OPENROUTER_API_KEY",
@@ -57,7 +57,7 @@ class LLM:
                 continue
             tried.append(spec)
             budget = max_tokens
-            for attempt in range(3):
+            for attempt in range(4):
                 try:
                     payload = {"model": model, "temperature": 0.2, "max_tokens": budget, "messages": messages}
                     if "gpt-oss" in model:
@@ -77,10 +77,12 @@ class LLM:
                         self.log.append(f"{spec}: unreadable answer")
                         self.dead.add(spec)
                         break
+                    msg = choice.get("message", {})
+                    if not text.strip() and "{" in str(msg.get("reasoning") or ""):
+                        text = str(msg["reasoning"])    # gpt-oss sometimes writes its answer into the reasoning field
                     if text.strip() and finish != "length":
                         self.used.append(spec)
                         return text, spec
-                    msg = choice.get("message", {})
                     extra = (f" finish={finish} used={r.json().get('usage', {}).get('completion_tokens')} "
                              f"keys={sorted(msg)} tool_calls={bool(msg.get('tool_calls'))} "
                              f"reasoning={str(msg.get('reasoning') or '')[:160]!r}")
@@ -89,7 +91,7 @@ class LLM:
                         budget = max_tokens * 3
                         continue
                     break                                       # stopped by itself with nothing: next model for this turn
-                if r.status_code == 429 and attempt < 2:
+                if r.status_code == 429 and attempt < 3:
                     wait = _retry_after(r)
                     self.log.append(f"{spec}: HTTP 429, waiting {wait:.0f}s")
                     self.sleep(wait)
@@ -103,7 +105,7 @@ class LLM:
         raise LLMUnavailable("no AI model answered (tried: " + (", ".join(tried) or "none - no keys set") + ")")
 
 
-def _retry_after(r, default=8.0, cap=25.0):
+def _retry_after(r, default=8.0, cap=60.0):
     try:
         return min(float(getattr(r, "headers", {}).get("retry-after", default)), cap)
     except (TypeError, ValueError):

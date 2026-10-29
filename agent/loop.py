@@ -18,15 +18,22 @@ fetching more pages first. Never repeat a call that already failed."""
 
 
 def parse_action(text):
-    t = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-    for cand in (t, t[t.find("{"):t.rfind("}") + 1] if "{" in t else ""):
+    """The model's chosen action: the last JSON object in its answer that has a "tool" or "done" key. Tolerates
+    code fences, <think> blocks and chatter around the JSON."""
+    t = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S)
+    dec, found, i = json.JSONDecoder(), None, 0
+    while True:
+        i = t.find("{", i)
+        if i < 0:
+            return found
         try:
-            obj = json.loads(cand)
-            if isinstance(obj, dict):
-                return obj
+            obj, end = dec.raw_decode(t, i)
         except ValueError:
+            i += 1
             continue
-    return None
+        if isinstance(obj, dict) and ("tool" in obj or "done" in obj):
+            found = obj
+        i = end
 
 
 def run(llm, tools, goal, limits, clock=time.monotonic):
@@ -49,7 +56,7 @@ def run(llm, tools, goal, limits, clock=time.monotonic):
         action = parse_action(text)
         if action is None:
             bad += 1
-            steps.append({"step": n, "tool": None, "ok": False, "note": "unparseable answer"})
+            steps.append({"step": n, "tool": None, "ok": False, "error": "unparseable answer: " + text.strip()[:120]})
             if bad >= 2:
                 stopped = "bad_output"
                 break
