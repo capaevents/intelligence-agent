@@ -7,7 +7,7 @@ import time
 import requests
 
 CHAIN = [
-    ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]),
+    ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "qwen/qwen3.8-27b"]),
     ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "GEMINI_API_KEY",
      ["gemini-3.8-flash", "gemini-flash-latest"]),
     ("cloudflare", "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions", "CF_AI_TOKEN",
@@ -59,8 +59,11 @@ class LLM:
             budget = max_tokens
             for attempt in range(3):
                 try:
+                    payload = {"model": model, "temperature": 0.2, "max_tokens": budget, "messages": messages}
+                    if "gpt-oss" in model:
+                        payload["reasoning_effort"] = "low"     # think briefly: a long think can leave the answer empty
                     r = self.http.post(url, timeout=90, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                                       json={"model": model, "temperature": 0.2, "max_tokens": budget, "messages": messages})
+                                       json=payload)
                 except requests.RequestException as e:
                     self.log.append(f"{spec}: {type(e).__name__}")
                     self.dead.add(spec)
@@ -77,7 +80,10 @@ class LLM:
                     if text.strip() and finish != "length":
                         self.used.append(spec)
                         return text, spec
-                    self.log.append(f"{spec}: {'cut off' if text.strip() else 'empty answer'} at {budget} tokens")
+                    msg = choice.get("message", {})
+                    extra = (f" finish={finish} used={r.json().get('usage', {}).get('completion_tokens')} "
+                             f"reasoning_chars={len(str(msg.get('reasoning') or ''))}")
+                    self.log.append(f"{spec}: {'cut off' if text.strip() else 'empty answer'} at {budget} tokens{extra}")
                     if attempt == 0:
                         budget = max_tokens * 3
                         continue

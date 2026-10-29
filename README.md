@@ -26,7 +26,7 @@ There is no tool to send email, edit tracker items or touch people's records.
 - Manual trigger only (GitHub Actions > Run intelligence agent). Nothing runs on a schedule yet.
 
 ## AI models (free tiers)
-Fallback order, used only if the key exists: Groq (`gpt-oss-120b`, then Qwen) > Google Gemini Flash >
+Fallback order, used only if the key exists: Groq (`gpt-oss-120b`, then Llama 3.3 70B, then Qwen) > Google Gemini Flash >
 Cloudflare Workers AI (Llama 3.3 70B) > OpenRouter free (NVIDIA Nemotron). Override with `AGENT_MODELS`.
 
 ## Try it
