@@ -36,6 +36,8 @@ def main(argv=None):
     for line in result.get("ai_log", []):
         print("ai:", line)
     print(json.dumps({k: result[k] for k in ("stopped", "model", "seconds", "searches", "fetches", "summary")}, indent=2))
+    for i, f in enumerate(result["findings"], 1):
+        print(f"finding {i} [{f['theme']}]: {f['title']}\n  url: {f['url']}\n  summary: {f['summary']}\n  why: {f['reason']}")
     print(f"{len(result['findings'])} suggested finding(s), {len(result['steps'])} step(s) -> {where}")
     return 1 if result["stopped"] in ("ai_unavailable", "bad_output") else 0
 
