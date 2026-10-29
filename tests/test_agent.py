@@ -121,9 +121,9 @@ def test_llm_falls_through_to_the_next_model():
             self.n += 1
             return Resp(b"{}", 429) if self.n == 1 else Resp(json.dumps({"choices": [{"message": {"content": "hi"}}]}).encode())
 
-    llm = LLM(env={"GROQ_API_KEY": "k", "GEMINI_API_KEY": "k"}, http=H())
+    llm = LLM(env={"GROQ_API_KEY": "k", "GEMINI_API_KEY": "k"}, http=H(), sleep=lambda s: None)
     text, spec = llm.chat([{"role": "user", "content": "x"}])
-    assert text == "hi" and spec.startswith("groq:") and llm.log        # first Groq model failed, second answered
+    assert text == "hi" and spec.startswith("groq:") and llm.log        # rate limit was waited out, then answered
 
 
 def test_llm_with_no_keys_raises():
@@ -138,3 +138,31 @@ def test_dry_run_store_writes_a_file(tmp_path):
     s = DryRunStore(out_dir=tmp_path)
     p = s.save_run({"findings": [], "steps": [], "stopped": "done", "model": None, "seconds": 0, "summary": ""})
     assert json.loads(open(p).read())["stopped"] == "done"
+
+
+def test_empty_answer_is_retried_with_more_room():
+    seen = []
+
+    class H:
+        def post(self, url, **kw):
+            seen.append(kw["json"]["max_tokens"])
+            content = "" if len(seen) == 1 else "ok"
+            return Resp(json.dumps({"choices": [{"message": {"content": content}}]}).encode())
+
+    llm = LLM(env={"GROQ_API_KEY": "k"}, http=H(), sleep=lambda s: None)
+    text, spec = llm.chat([{"role": "user", "content": "x"}], max_tokens=1000)
+    assert text == "ok" and seen == [1000, 3000] and spec == "groq:openai/gpt-oss-120b"
+
+
+def test_a_hard_failure_moves_to_the_next_model():
+    class H:
+        def __init__(self):
+            self.n = 0
+
+        def post(self, url, **kw):
+            self.n += 1
+            return Resp(b"{}", 401) if "groq" in url else Resp(json.dumps({"choices": [{"message": {"content": "hi"}}]}).encode())
+
+    llm = LLM(env={"GROQ_API_KEY": "k", "GEMINI_API_KEY": "k"}, http=H(), sleep=lambda s: None)
+    text, spec = llm.chat([{"role": "user", "content": "x"}])
+    assert spec.startswith("gemini:") and any("HTTP 401" in l for l in llm.log)
