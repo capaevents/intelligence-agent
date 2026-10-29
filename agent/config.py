@@ -8,7 +8,7 @@ THEMES = ["ai_digitalisation", "talent", "sustainability", "ethics_standards", "
 
 # Hard limits for one run. The loop stops at the first one it reaches.
 LIMITS = {
-    "max_steps": 8,         # model turns
+    "max_steps": 12,        # model turns
     "max_searches": 3,      # search_news calls
     "max_fetches": 4,       # fetch_page calls
     "max_findings": 10,     # save_finding calls

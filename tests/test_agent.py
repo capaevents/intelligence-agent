@@ -140,14 +140,15 @@ def test_dry_run_store_writes_a_file(tmp_path):
     assert json.loads(open(p).read())["stopped"] == "done"
 
 
-def test_empty_answer_is_retried_with_more_room():
+def test_cut_off_answer_is_retried_with_more_room():
     seen = []
 
     class H:
         def post(self, url, **kw):
             seen.append(kw["json"]["max_tokens"])
-            content = "" if len(seen) == 1 else "ok"
-            return Resp(json.dumps({"choices": [{"message": {"content": content}}]}).encode())
+            first = len(seen) == 1
+            return Resp(json.dumps({"choices": [{"finish_reason": "length" if first else "stop",
+                                                 "message": {"content": "" if first else "ok"}}]}).encode())
 
     llm = LLM(env={"GROQ_API_KEY": "k"}, http=H(), sleep=lambda s: None)
     text, spec = llm.chat([{"role": "user", "content": "x"}], max_tokens=1000)
@@ -166,3 +167,24 @@ def test_a_hard_failure_moves_to_the_next_model():
     llm = LLM(env={"GROQ_API_KEY": "k", "GEMINI_API_KEY": "k"}, http=H(), sleep=lambda s: None)
     text, spec = llm.chat([{"role": "user", "content": "x"}])
     assert spec.startswith("gemini:") and any("HTTP 401" in l for l in llm.log)
+
+
+def test_empty_stop_goes_to_next_model_without_killing_the_first():
+    class H:
+        def post(self, url, **kw):
+            body = {"choices": [{"finish_reason": "stop", "message": {"content": "" if "gpt-oss" in kw["json"]["model"] else "hi"}}]}
+            return Resp(json.dumps(body).encode())
+
+    llm = LLM(env={"GROQ_API_KEY": "k"}, http=H(), sleep=lambda s: None)
+    text, spec = llm.chat([{"role": "user", "content": "x"}])
+    assert text == "hi" and spec == "groq:qwen/qwen3.8-27b"
+    assert "groq:openai/gpt-oss-120b" not in llm.dead and any("empty answer" in l for l in llm.log)
+
+
+def test_a_failed_call_is_not_repeated_and_the_error_is_recorded():
+    http = FakeHTTP(Resp(b"", 404))
+    t = tools(http=http)
+    call = act("fetch_page", url="https://www.iaasb.org/nope")
+    r = run(FakeLLM([call, call, {"done": True, "summary": "x"}]), t, "g", dict(LIMITS))
+    assert len(http.calls) == 1                                           # second identical call never hit the site
+    assert r["steps"][0]["ok"] is False and "404" in r["steps"][0]["error"] and r["steps"][1]["ok"] is False

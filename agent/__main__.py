@@ -32,7 +32,7 @@ def main(argv=None):
     result = run(llm, Tools(store, allowed_domains(), limits), goal, limits)
     where = store.save_run(result)
     for st in result["steps"]:
-        print(f"step {st['step']}: {st.get('tool')} {json.dumps(st.get('args', {}))[:120]} ok={st['ok']}")
+        print(f"step {st['step']}: {st.get('tool')} {json.dumps(st.get('args', {}))[:120]} ok={st['ok']}" + (f" error={st['error']}" if st.get("error") else ""))
     for line in result.get("ai_log", []):
         print("ai:", line)
     print(json.dumps({k: result[k] for k in ("stopped", "model", "seconds", "summary")}, indent=2))

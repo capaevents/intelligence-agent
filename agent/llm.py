@@ -7,7 +7,7 @@ import time
 import requests
 
 CHAIN = [
-    ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "qwen/qwen3.8-27b"]),
+    ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]),
     ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "GEMINI_API_KEY",
      ["gemini-3.8-flash", "gemini-flash-latest"]),
     ("cloudflare", "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions", "CF_AI_TOKEN",
@@ -82,13 +82,13 @@ class LLM:
                         return text, spec
                     msg = choice.get("message", {})
                     extra = (f" finish={finish} used={r.json().get('usage', {}).get('completion_tokens')} "
-                             f"reasoning_chars={len(str(msg.get('reasoning') or ''))}")
+                             f"keys={sorted(msg)} tool_calls={bool(msg.get('tool_calls'))} "
+                             f"reasoning={str(msg.get('reasoning') or '')[:160]!r}")
                     self.log.append(f"{spec}: {'cut off' if text.strip() else 'empty answer'} at {budget} tokens{extra}")
-                    if attempt == 0:
+                    if finish == "length" and attempt == 0:    # ran out of room: try once with more
                         budget = max_tokens * 3
                         continue
-                    self.dead.add(spec)
-                    break
+                    break                                       # stopped by itself with nothing: next model for this turn
                 if r.status_code == 429 and attempt < 2:
                     wait = _retry_after(r)
                     self.log.append(f"{spec}: HTTP 429, waiting {wait:.0f}s")

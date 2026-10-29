@@ -19,7 +19,7 @@ or a limit is reached.
 There is no tool to send email, edit tracker items or touch people's records.
 
 ## Safety rules (enforced in code, tested in `tests/test_agent.py`)
-- Limits per run: 8 steps, 3 searches, 4 page fetches, 10 findings, 240 seconds.
+- Limits per run: 12 steps, 3 searches, 4 page fetches, 10 findings, 240 seconds.
 - A finding's URL must have appeared in a tool result: it cannot cite a source it did not find.
 - Pages outside the allowlist are refused. Change it with the `AGENT_ALLOWED_DOMAINS` variable.
 - If every AI model runs out of free quota, the run stops. It never switches to a paid service.
@@ -34,7 +34,7 @@ Cloudflare Workers AI (Llama 3.3 70B) > OpenRouter free (NVIDIA Nemotron). Overr
 pip install -r requirements.txt
 export GROQ_API_KEY=...            # any one provider key is enough
 python -m agent --dry-run          # no database; result written to out/run-*.json
-python -m pytest                   # 13 tests, no keys or network needed
+python -m pytest                   # 15 tests, no keys or network needed
 ```
 
 ## Saving to Supabase
