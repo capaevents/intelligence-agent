@@ -135,12 +135,17 @@ class Tools:
     def save_finding(self, summary, reason, title="", url="", ref="", theme="other"):
         if self.count["save_finding"] >= self.limits["max_findings"]:
             return {"error": "finding limit reached"}
-        if ref:
-            hit = self.refs.get(str(ref))
-            if not hit:
-                return {"error": f"unknown ref {ref!r}; use an id from a search result, or give a url"}
+        ref = str(ref or "").strip()
+        if ref.lower().startswith("http"):           # models sometimes put the link in "ref"
+            url, ref = ref, ""
+        hit = self.refs.get(ref)
+        if ref and not hit and not url:
+            return {"error": f"unknown ref {ref!r}; use an id from a search result (r1, r2...), or give a url"}
+        if hit:
             url, title = hit["url"], title or hit["title"]
-        if ref == "" and urlsplit(url or "").path.strip("/") == "":
+        if not str(url or "").strip():
+            return {"error": "give either ref (a search result id) or url"}
+        if not hit and urlsplit(url or "").path.strip("/") == "":
             return {"error": "that is a site's home page, not a source. Save the specific article: use its own url from "
                              "the page's links list, or the id of a search result."}
         if norm(url) not in self.seen:

@@ -254,3 +254,12 @@ def test_a_home_page_is_not_accepted_as_a_source():
     t.seen.add("https://www.iaasb.org")
     out = t.call("save_finding", {"title": "t", "url": "https://www.iaasb.org/", "summary": "s", "reason": "r"})
     assert "error" in out and "home page" in out["error"] and not t.findings
+
+
+def test_link_put_in_the_ref_field_is_treated_as_the_url():
+    t = tools()
+    t.seen.add("https://www.iaasb.org/news/a-story")
+    out = t.call("save_finding", {"ref": "https://www.iaasb.org/news/a-story", "title": "T", "summary": "s", "reason": "r"})
+    assert out["saved"] and t.findings[0]["url"] == "https://www.iaasb.org/news/a-story"
+    out = t.call("save_finding", {"ref": "url", "url": "https://www.iaasb.org/news/b", "title": "T", "summary": "s", "reason": "r"})
+    assert "error" in out and "not seen" in out["error"]        # junk ref ignored; the url is still checked
