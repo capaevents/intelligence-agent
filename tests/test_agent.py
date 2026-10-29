@@ -61,7 +61,7 @@ def test_full_run_saves_a_finding():
                    act("save_finding", title="IAASB AI exposure draft", url="https://news.example.org/a1",
                        summary="IAASB proposes AI guidance.", reason="Affects auditors in the region.", theme="ai_digitalisation"),
                    {"done": True, "summary": "One finding."}])
-    r = run(llm, t, "goal", dict(LIMITS))
+    r = run(llm, t, "goal", dict(LIMITS, min_searches=1))
     assert r["stopped"] == "done"
     assert [s["tool"] for s in r["steps"]] == ["read_tracker", "search_news", "save_finding", "done"]
     assert r["findings"][0]["status"] == "suggested" and r["findings"][0]["theme"] == "ai_digitalisation"
