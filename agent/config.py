@@ -9,6 +9,7 @@ THEMES = ["ai_digitalisation", "talent", "sustainability", "ethics_standards", "
 # Hard limits for one run. The loop stops at the first one it reaches.
 LIMITS = {
     "max_steps": 12,        # model turns
+    "min_searches": 2,      # the agent may not finish before this many searches
     "max_searches": 3,      # search_news calls
     "max_fetches": 4,       # fetch_page calls
     "max_findings": 10,     # save_finding calls
@@ -22,7 +23,7 @@ sustainability reporting and assurance; ethics and professional standards. Prior
 IAASB, IESBA, IFAC and IFRS/ISSB, and what member accountancy bodies (PAOs) in Asia-Pacific have said or done.
 Use read_tracker first to see what CAPA already holds, so you do not repeat it. Then search and fetch to find \
 what is missing. Save each useful finding with save_finding, including the source URL and one sentence on why \
-it matters to CAPA. Quality over quantity: it is fine to save nothing if nothing new is worth flagging."""
+it matters to CAPA. Search at least twice before you finish. Quality over quantity: saving nothing is fine only after you have searched and found nothing new worth flagging."""
 
 
 def allowed_domains(env=None):

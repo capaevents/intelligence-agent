@@ -8,7 +8,7 @@ import requests
 
 CHAIN = [
     ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "GEMINI_API_KEY",
-     ["gemini-3.8-flash", "gemini-flash-latest"]),
+     ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"]),
     ("groq", "https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY", ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"]),
     ("cloudflare", "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions", "CF_AI_TOKEN",
      ["@cf/meta/llama-3.3-70b-instruct-fp8-fast"]),
@@ -62,7 +62,7 @@ class LLM:
                     payload = {"model": model, "temperature": 0.2, "max_tokens": budget, "messages": messages}
                     if "gpt-oss" in model:
                         payload["reasoning_effort"] = "low"     # think briefly: a long think can leave the answer empty
-                    r = self.http.post(url, timeout=90, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    r = self.http.post(url, timeout=60, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                                        json=payload)
                 except requests.RequestException as e:
                     self.log.append(f"{spec}: {type(e).__name__}")

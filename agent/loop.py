@@ -42,7 +42,7 @@ def run(llm, tools, goal, limits, clock=time.monotonic):
                 {"role": "user", "content": f"GOAL:\n{goal}\n\n{TOOL_HELP}\n\nLimits: {limits['max_steps']} steps, "
                                             f"{limits['max_searches']} searches, {limits['max_fetches']} page fetches."}]
     steps, summary, stopped, bad = [], "", "max_steps", 0
-    failed = set()
+    failed, too_early = set(), 0
     for n in range(1, limits["max_steps"] + 1):
         if clock() - start > limits["max_seconds"]:
             stopped = "time_limit"
@@ -64,6 +64,14 @@ def run(llm, tools, goal, limits, clock=time.monotonic):
                          {"role": "user", "content": 'Reply with ONLY one JSON object, e.g. {"tool": "read_tracker", "args": {}}.'}]
             continue
         bad = 0
+        if action.get("done") and tools.count["search_news"] < limits.get("min_searches", 0) and too_early < 2 \
+                and n < limits["max_steps"] - 1:
+            too_early += 1
+            steps.append({"step": n, "tool": "done", "ok": False, "error": "finished before searching"})
+            messages += [{"role": "assistant", "content": json.dumps(action)},
+                         {"role": "user", "content": f"Not yet: you have run {tools.count['search_news']} searches and must run at "
+                                                     f"least {limits['min_searches']} before finishing. Use search_news now."}]
+            continue
         if action.get("done"):
             summary = str(action.get("summary", ""))[:800]
             steps.append({"step": n, "tool": "done", "ok": True})
@@ -86,4 +94,5 @@ def run(llm, tools, goal, limits, clock=time.monotonic):
         messages += [{"role": "assistant", "content": json.dumps(action)},
                      {"role": "user", "content": f"RESULT of {name}: " + clip(result, limits["max_tool_chars"]) + hint}]
     return {"findings": tools.findings, "steps": steps, "summary": summary, "stopped": stopped,
-            "model": (llm.used[-1] if llm.used else None), "seconds": round(clock() - start, 1), "ai_log": llm.log}
+            "model": (llm.used[-1] if llm.used else None), "seconds": round(clock() - start, 1), "ai_log": llm.log,
+            "searches": tools.count["search_news"], "fetches": tools.count["fetch_page"]}

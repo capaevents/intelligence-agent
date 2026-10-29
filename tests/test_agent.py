@@ -212,3 +212,10 @@ def test_save_finding_by_search_result_id():
     out = t.call("save_finding", {"ref": "r1", "summary": "s", "reason": "r", "theme": "ethics_standards"})
     assert out == {"saved": True, "total": 1} and t.findings[0]["url"]
     assert "error" in t.call("save_finding", {"ref": "r99", "summary": "s", "reason": "r"})
+
+
+def test_agent_cannot_finish_before_minimum_searches():
+    t = tools()
+    r = run(FakeLLM([{"done": True, "summary": "nothing"}, act("search_news", query="a"), act("search_news", query="b"),
+                     {"done": True, "summary": "ok"}]), t, "g", dict(LIMITS, min_searches=2))
+    assert r["stopped"] == "done" and r["searches"] == 2 and r["steps"][0]["ok"] is False
