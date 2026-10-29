@@ -31,6 +31,8 @@ def main(argv=None):
     llm = LLM()
     result = run(llm, Tools(store, allowed_domains(), limits), goal, limits)
     where = store.save_run(result)
+    for line in result.get("ai_log", []):
+        print("ai:", line)
     print(json.dumps({k: result[k] for k in ("stopped", "model", "seconds", "summary")}, indent=2))
     print(f"{len(result['findings'])} suggested finding(s), {len(result['steps'])} step(s) -> {where}")
     return 1 if result["stopped"] in ("ai_unavailable", "bad_output") else 0
