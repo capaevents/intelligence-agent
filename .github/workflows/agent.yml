@@ -1,0 +1,43 @@
+name: Run intelligence agent
+
+# Manual only for now: nothing runs until someone presses "Run workflow" on the Actions tab.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no database; result is attached to the run). Untick to save suggestions to Supabase."
+        type: boolean
+        default: true
+
+concurrency:
+  group: agent
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Run agent
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_AI_TOKEN: ${{ secrets.CF_AI_TOKEN }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          DRY: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "$DRY" = "true" ]; then python -m agent --dry-run; else python -m agent; fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-output
+          path: out/
+          if-no-files-found: ignore

@@ -1,0 +1,140 @@
+"""The agent's safety rules, tested with a scripted fake model and fake web. No network, no AI keys needed."""
+import json
+
+from agent.config import LIMITS
+from agent.llm import LLM, LLMUnavailable
+from agent.loop import run
+from agent.store import DryRunStore
+from agent.tools import Tools
+
+RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel><title>x</title>
+<item><title>IAASB issues AI exposure draft</title><link>https://news.example.org/a1</link><pubDate>Mon, 26 Oct 2026 01:00:00 GMT</pubDate></item>
+</channel></rss>"""
+
+
+class Resp:
+    def __init__(self, content=b"", status=200, url="https://x"):
+        self.content, self.status_code, self.url = content, status, url
+        self.text = content.decode("utf8", "ignore")
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+    def json(self):
+        return json.loads(self.text)
+
+
+class FakeHTTP:
+    def __init__(self, resp=None):
+        self.headers, self.calls, self.resp = {}, [], resp or Resp(RSS)
+
+    def get(self, url, **kw):
+        self.calls.append(url)
+        return self.resp
+
+
+class FakeLLM:
+    def __init__(self, script):
+        self.script, self.i, self.used, self.log = list(script), 0, [], []
+
+    def chat(self, messages, max_tokens=900):
+        text = self.script[min(self.i, len(self.script) - 1)]
+        self.i += 1
+        self.used.append("fake:model")
+        return (text if isinstance(text, str) else json.dumps(text)), "fake:model"
+
+
+def tools(http=None, items=None, limits=None):
+    store = DryRunStore()
+    store.items = items or []
+    return Tools(store, ["iaasb.org"], limits or dict(LIMITS), http=http or FakeHTTP())
+
+
+def act(tool, **args):
+    return {"tool": tool, "args": args}
+
+
+def test_full_run_saves_a_finding():
+    t = tools()
+    llm = FakeLLM([act("read_tracker"), act("search_news", query="IAASB AI"),
+                   act("save_finding", title="IAASB AI exposure draft", url="https://news.example.org/a1",
+                       summary="IAASB proposes AI guidance.", reason="Affects auditors in the region.", theme="ai_digitalisation"),
+                   {"done": True, "summary": "One finding."}])
+    r = run(llm, t, "goal", dict(LIMITS))
+    assert r["stopped"] == "done"
+    assert [s["tool"] for s in r["steps"]] == ["read_tracker", "search_news", "save_finding", "done"]
+    assert r["findings"][0]["status"] == "suggested" and r["findings"][0]["theme"] == "ai_digitalisation"
+
+
+def test_cannot_save_a_url_it_never_saw():
+    t = tools()
+    out = t.call("save_finding", {"title": "t", "url": "https://made.up/x", "summary": "s", "reason": "r"})
+    assert "error" in out and not t.findings
+
+
+def test_fetch_refuses_sites_off_the_allowlist():
+    http = FakeHTTP()
+    t = tools(http)
+    for bad in ("https://evil.com/", "https://evil-iaasb.org/", "https://iaasb.org.evil.com/", "file:///etc/passwd"):
+        assert "error" in t.call("fetch_page", {"url": bad})
+    assert http.calls == []
+    assert t.host_allowed("https://www.iaasb.org/x") and t.host_allowed("https://iaasb.org")
+
+
+def test_step_limit_is_enforced_by_the_code():
+    limits = dict(LIMITS, max_steps=3)
+    llm = FakeLLM([act("read_tracker")])      # never says done
+    r = run(llm, tools(limits=limits), "goal", limits)
+    assert r["stopped"] == "max_steps" and len(r["steps"]) == 3
+
+
+def test_search_limit():
+    t = tools(limits=dict(LIMITS, max_searches=1))
+    assert "results" in t.call("search_news", {"query": "a"})
+    assert "error" in t.call("search_news", {"query": "b"})
+
+
+def test_bad_output_stops_the_run():
+    r = run(FakeLLM(["I think we should search"]), tools(), "goal", dict(LIMITS))
+    assert r["stopped"] == "bad_output"
+
+
+def test_unknown_tool_and_bad_args_do_not_crash():
+    t = tools()
+    assert "error" in t.call("send_email", {"to": "x"})
+    assert "error" in t.call("read_tracker", {"nonsense": 1})
+    assert "error" in t.call("read_tracker", "not a dict")
+
+
+def test_no_tool_can_write_except_save_finding():
+    assert {n for n in dir(Tools) if not n.startswith("_")} >= {"read_tracker", "search_news", "fetch_page", "save_finding"}
+    assert not [n for n in dir(Tools) if "send" in n or "delete" in n or "update" in n]
+
+
+def test_llm_falls_through_to_the_next_model():
+    class H:
+        def __init__(self):
+            self.n = 0
+
+        def post(self, url, **kw):
+            self.n += 1
+            return Resp(b"{}", 429) if self.n == 1 else Resp(json.dumps({"choices": [{"message": {"content": "hi"}}]}).encode())
+
+    llm = LLM(env={"GROQ_API_KEY": "k", "GEMINI_API_KEY": "k"}, http=H())
+    text, spec = llm.chat([{"role": "user", "content": "x"}])
+    assert text == "hi" and spec.startswith("groq:") and llm.log        # first Groq model failed, second answered
+
+
+def test_llm_with_no_keys_raises():
+    try:
+        LLM(env={}).chat([])
+        assert False
+    except LLMUnavailable:
+        pass
+
+
+def test_dry_run_store_writes_a_file(tmp_path):
+    s = DryRunStore(out_dir=tmp_path)
+    p = s.save_run({"findings": [], "steps": [], "stopped": "done", "model": None, "seconds": 0, "summary": ""})
+    assert json.loads(open(p).read())["stopped"] == "done"
