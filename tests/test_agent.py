@@ -234,3 +234,16 @@ def test_empty_handed_finish_is_accepted_the_second_time():
     llm = FakeLLM([act("search_news", query="a"), {"done": True, "summary": "n"}, {"done": True, "summary": "still n"}])
     r = run(llm, t, "g", dict(LIMITS, min_searches=1))
     assert r["stopped"] == "done" and r["findings"] == [] and r["summary"] == "still n"
+
+
+def test_arguments_written_beside_the_tool_name_are_accepted():
+    t = tools()
+    llm = FakeLLM([{"tool": "search_news", "query": "IAASB"}, {"tool": "search_news", "arguments": {"query": "IESBA"}},
+                   {"done": True, "summary": "x"}])
+    r = run(llm, t, "g", dict(LIMITS, min_searches=2))
+    assert r["searches"] == 2 and r["steps"][0]["ok"] and r["steps"][1]["ok"]
+
+
+def test_bad_arguments_error_shows_the_exact_shape():
+    out = tools().call("search_news", {})
+    assert "error" in out and '"args"' in out["error"]

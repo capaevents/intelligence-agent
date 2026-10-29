@@ -37,6 +37,17 @@ def parse_action(text):
         i = end
 
 
+_RESERVED = ("tool", "name", "args", "arguments", "parameters", "input", "done")
+
+
+def _name_and_args(action):
+    """Models sometimes write the arguments beside the tool name instead of inside "args"; accept both."""
+    args = next((action[k] for k in ("args", "arguments", "parameters", "input") if isinstance(action.get(k), dict) and action[k]), None)
+    if args is None:
+        args = {k: v for k, v in action.items() if k not in _RESERVED}
+    return action.get("tool") or action.get("name"), args
+
+
 def run(llm, tools, goal, limits, clock=time.monotonic):
     start = clock()
     messages = [{"role": "system", "content": SYSTEM},
@@ -87,10 +98,10 @@ def run(llm, tools, goal, limits, clock=time.monotonic):
             steps.append({"step": n, "tool": "done", "ok": True})
             stopped = "done"
             break
-        name, args = action.get("tool"), action.get("args", {})
+        name, args = _name_and_args(action)
         key = json.dumps([name, args], sort_keys=True, default=str)
         if key in failed:
-            result = {"error": "you already tried exactly this and it failed; do something different"}
+            result = {"error": "you already tried exactly this and it failed; do something different (arguments go inside \"args\")"}
         else:
             result = tools.call(name, args)
             if "error" in result:

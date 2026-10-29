@@ -24,6 +24,14 @@ TOOL_HELP = """Tools (call ONE per turn):
 Finish with {"done": true, "summary": "<2-3 sentences on what you found and what you could not check>"}.""" % ", ".join(THEMES)
 
 
+EXAMPLES = {
+    "read_tracker": '{"tool": "read_tracker", "args": {"days": 7, "query": ""}}',
+    "search_news": '{"tool": "search_news", "args": {"query": "IAASB sustainability assurance"}}',
+    "fetch_page": '{"tool": "fetch_page", "args": {"url": "https://www.iaasb.org/news-events"}}',
+    "save_finding": '{"tool": "save_finding", "args": {"ref": "r3", "summary": "...", "reason": "...", "theme": "sustainability"}}',
+}
+
+
 def norm(url):
     p = urlsplit((url or "").strip())
     return urlunsplit((p.scheme.lower(), p.netloc.lower(), p.path.rstrip("/"), p.query, ""))
@@ -52,7 +60,7 @@ class Tools:
         try:
             return fn(**args)
         except TypeError as e:
-            return {"error": f"bad arguments: {e}"}
+            return {"error": f"bad arguments: {e}. Use exactly this shape: {EXAMPLES[name]}"}
         except Exception as e:  # noqa: BLE001 - a tool failure must not crash the run
             return {"error": f"{type(e).__name__}: {str(e)[:150]}"}
 
